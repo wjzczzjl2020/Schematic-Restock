@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "tools",
+  "pattern": [
+    "  s",
+    " sw",
+    "s w"
+  ],
+  "key": {
+    "s": {
+      "item": "minecraft:stick"
+    },
+    "w": {
+      "item": "minecraft:blue_wool"
+    }
+  },
+  "result": {
+    "count": 1,
+    "id": "schematic_restock:mark_wand"
+  }
+}

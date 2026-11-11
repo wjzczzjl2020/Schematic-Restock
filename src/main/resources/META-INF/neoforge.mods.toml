@@ -1,0 +1,83 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="${mod_license}"
+issueTrackerURL="https://automods.cn"
+# 模组 Logo：jar 内相对路径。没这个文件时原版只会回退成默认方块图标，不会崩。
+logoFile="assets/schematic_restock/textures/gui/logo.png"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+# 作者名：换成你自己的名字即可（逗号分隔多人）
+authors="AutoMods"
+description='''
+给 Forgematica（投影）配的自动化后台：加载原理图之后，
+按 V+M 一键补料 —— 只翻你用标记签标过的材料箱，先模拟再执行，
+缺的现成货按「手持容器 → 饰品栏背挂 → 随身潜影盒 → 背包」的优先级存放，
+算不出来的直接列清单响一声就把控制权还给你；
+按 V+U 一键打印 —— 服务端逐格放置，限流限距、缺料只延后不误判，
+放不下的格子永远留在原地等你补料。
+
+· 补料分两阶段：A 搬光箱中现货，B 再走多段工作台合成（原木→木板→木棍→工作台这类链条）。
+· 一格可以算两样料：花盆里带植物的按「空花盆 1 + 植物 1」收，双层台阶按 2 件、雪层按层数、蜡烛按根数计。
+· 全程只读原理图、只写真实世界，不碰投影的任何设置；投料账本实时同步回投影的 L 键缺口清单。
+
+硬依赖：Forgematica（原理图与缺口数据源）与 MaFgLib（它的基础库）——没装会启动即给出缺依赖提示。
+软依赖：Curios（装了才启用饰品栏背挂的存放路径）、精妙背包 / Sophisticated Core（装了才认它们的手持与饰品容器）。
+
+配置：config/schematic_restock-common.toml（每 tick 放置数、距离闸门、流体开关、覆盖策略、合成递归深度、兜底搜索半径）。
+'''
+
+# ---------------- 硬依赖 ----------------
+[[dependencies.${mod_id}]]
+modId="neoforge"
+type="required"
+versionRange="[21.1,)"
+ordering="NONE"
+side="BOTH"
+[[dependencies.${mod_id}]]
+modId="minecraft"
+type="required"
+versionRange="${minecraft_version_range}"
+ordering="NONE"
+side="BOTH"
+# 投影的 NeoForge 移植：缺口清单、原理图世界、L 键材料列表全部来自它。
+# 它的 modId 是 forgematica（同时注册 litematica 桩），缺了就无从读取缺口 —— 故为硬依赖。
+[[dependencies.${mod_id}]]
+modId="forgematica"
+type="required"
+versionRange="[0.3,)"
+ordering="AFTER"
+side="BOTH"
+# MaFgLib（MaLiLib 的 NeoForge 移植）：Forgematica 自己的硬依赖，这里显式写出来，
+# 漏装时原版加载器会直接点名 "Forgematica 补料接管 需要 MaFgLib"，比只报投影缺失好懂得多。
+[[dependencies.${mod_id}]]
+modId="mafglib"
+type="required"
+versionRange="[0.3,)"
+ordering="NONE"
+side="BOTH"
+
+# ---------------- 软依赖：装了才生效，没装自动跳过 ----------------
+# Curios：仅启用「饰品栏 back 槽的精妙背包」这一条存放路径（编译期只有接口，运行期反射调用）
+[[dependencies.${mod_id}]]
+modId="curios"
+type="optional"
+versionRange="[0,)"
+ordering="NONE"
+side="BOTH"
+# 精妙背包 / 它的基础库：认不认得只看物品能不能拿到 IItemHandler 能力，
+# 声明成可选只为在模组列表里说明「这两个装了会被更好地支持」。
+[[dependencies.${mod_id}]]
+modId="sophisticatedbackpacks"
+type="optional"
+versionRange="[0,)"
+ordering="NONE"
+side="BOTH"
+[[dependencies.${mod_id}]]
+modId="sophisticatedcore"
+type="optional"
+versionRange="[0,)"
+ordering="NONE"
+side="BOTH"

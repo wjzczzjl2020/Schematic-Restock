@@ -1,0 +1,15 @@
+{
+  "takeover_ok": {
+    "category": "player",
+    "sounds": [ "schematic_restock:takeover_ok" ]
+  },
+  "takeover_missing": {
+    "category": "player",
+    "sounds": [ "schematic_restock:takeover_missing" ]
+  },
+  "takeover_noop": {
+    "category": "master",
+    "volume": 0.7,
+    "sounds": [ "schematic_restock:takeover_noop" ]
+  }
+}
