@@ -124,12 +124,22 @@ public final class BuildBridge {
 
     /**
      * 覆盖策略：0=只填空气（配置里的 {@code autobuild.replacePolicy} 说了算）1=含原版可替换 2=不对就覆盖。
-     * r28：初值取自 {@link ModConfig}；{@code /matfill build replace …} 只改这份内存副本（下一份计划生效），
-     * 不改配置文件 —— 与"配置定默认、命令做临时覆盖"的分工一致。
+     *
+     * <p><b>r32：这两个值绝不能再写成"静态字段初值直接读配置"</b>。
+     * 上一版就是 {@code private static int replacePolicy = ModConfig.replacePolicyCode();} ——
+     * 本类在模组构造器阶段（{@code ClientEvents.init} 一摸到它）就完成静态初始化，
+     * 而 {@code Type.COMMON} 的 TOML 要到所有构造器跑完才加载，
+     * 于是 {@code get()} 直接抛 {@code IllegalStateException: Cannot get config value before config is loaded.}，
+     * 玩家看到的就是"启动即崩溃"。</p>
+     *
+     * <p>现在的分工：这里只存<b>命令的临时覆盖</b>（{@code null} = 没人覆盖，去现读配置文件），
+     * 读取一律走 {@link #replacePolicy()} / {@link #placeFluids()} —— 用到时才问，
+     * 那时候配置早就加载好了。语义和 {@code /matfill build replace …} 原本写的那样一致：
+     * "配置定默认、命令做临时覆盖（下一份计划生效），不改文件"。</p>
      */
-    private static int replacePolicy = ModConfig.replacePolicyCode();
-    /** 流体是否参与放置（初值 {@code autobuild.placeFluids}；服务端那道权威闸门另说）。 */
-    private static boolean placeFluids = ModConfig.placeFluidsAllowed();
+    private static Integer replacePolicyOverride;
+    /** 流体开关的命令临时覆盖（{@code null} = 跟随 {@code autobuild.placeFluids}）。 */
+    private static Boolean placeFluidsOverride;
 
     private BuildBridge() {}
 
@@ -250,13 +260,29 @@ public final class BuildBridge {
         }
     }
 
-    public static void setReplacePolicy(int p) { replacePolicy = Math.max(0, Math.min(2, p)); }
-    public static int replacePolicy() { return replacePolicy; }
-    public static void setPlaceFluids(boolean v) { placeFluids = v; }
-    public static boolean placeFluids() { return placeFluids; }
+    /** {@code /matfill build replace …}：只记一份内存覆盖，下一份计划生效，不写配置文件。 */
+    public static void setReplacePolicy(int p) { replacePolicyOverride = Math.max(0, Math.min(2, p)); }
+
+    /** 当前生效的覆盖策略：命令覆盖优先，否则现读 {@code autobuild.replacePolicy}。 */
+    public static int replacePolicy() {
+        Integer o = replacePolicyOverride;
+        return o != null ? o : ModConfig.replacePolicyCode();
+    }
+
+    /** {@code /matfill build fluids …}。 */
+    public static void setPlaceFluids(boolean v) { placeFluidsOverride = v; }
+
+    /** 当前生效的流体开关：命令覆盖优先，否则现读 {@code autobuild.placeFluids}。 */
+    public static boolean placeFluids() {
+        Boolean o = placeFluidsOverride;
+        return o != null ? o : ModConfig.placeFluidsAllowed();
+    }
+
+    /** 命令覆盖有没有盖在配置文件上面（诊断行里说明"这一项现在是谁说了算"）。 */
+    public static boolean policyOverridden() { return replacePolicyOverride != null; }
 
     public static String policyName() {
-        return switch (replacePolicy) {
+        return switch (replacePolicy()) {
             case SR.BUILD_REPLACE_SOFT -> Txt.s("policy.soft");
             case SR.BUILD_REPLACE_MISMATCH -> Txt.s("policy.mismatch");
             default -> Txt.s("policy.air");
@@ -480,7 +506,8 @@ public final class BuildBridge {
             default -> "空闲";
         } + "（" + placed + "/" + queued + " 块，已对 " + skipped + "，非空 " + blocked
                 + "，缺料 " + missing + "，延后 " + deferred + "）"
-                + " | 覆盖=" + policyName() + " | 流体=" + (placeFluids ? "放（排最后）" : "不放")
+                + " | 覆盖=" + policyName() + (policyOverridden() ? "（命令覆盖）" : "（配置文件）")
+                + " | 流体=" + (placeFluids() ? "放（排最后）" : "不放")
                 + (uploading ? " | 上传中：已发 " + chunksSent + " 包，剩 " + outbox.size()
                              + " 包（一 tick 一包，服务端收齐才开工）" : "")
                 + (note.isEmpty() ? "" : " | " + note);
@@ -538,6 +565,8 @@ public final class BuildBridge {
         long id = System.nanoTime();
         planId = id;
         int size = p.entries.size();
+        // r32：整份计划用同一个策略（分包期间配置不会变，但抓一次更省心，也免得每包现读）
+        final int policy = replacePolicy();
         int chunks = Math.max(1, (size + SR.BUILD_CHUNK - 1) / SR.BUILD_CHUNK);
         for (int c = 0; c < chunks; c++) {
             int from = c * SR.BUILD_CHUNK;
@@ -549,7 +578,7 @@ public final class BuildBridge {
                 pal.add((int) p.entries.get(i)[1]);
             }
             outbox.add(new Packets.BuildPlan(id, c, c == 0, c == chunks - 1,
-                    size, replacePolicy, c == 0 ? List.copyOf(p.palette) : List.of(), pos, pal));
+                    size, policy, c == 0 ? List.copyOf(p.palette) : List.of(), pos, pal));
         }
         uploading = true;
         state = ST_RUNNING;
@@ -647,7 +676,7 @@ public final class BuildBridge {
                             }
                             if (want == null || want.isAir()) continue;
                             boolean fluid = isFluidState(want);
-                            if (fluid && !placeFluids) continue;
+                            if (fluid && !placeFluids()) continue;
 
                             // 现状过滤：客户端这一带没加载完时 getBlockState 给的是空气，
                             // 那就一并交过去——服务端会拿真实世界再判一遍（覆盖策略由服务端把关）。
@@ -710,7 +739,7 @@ public final class BuildBridge {
 
     /** 只填空气 / 允许原版判定可替换（草、雪、水） / 只要不对就换。 */
     private static boolean mayReplace(BlockState have) {
-        return switch (replacePolicy) {
+        return switch (replacePolicy()) {
             case SR.BUILD_REPLACE_SOFT -> have.isAir() || have.canBeReplaced();
             case SR.BUILD_REPLACE_MISMATCH -> true;
             default -> have.isAir();

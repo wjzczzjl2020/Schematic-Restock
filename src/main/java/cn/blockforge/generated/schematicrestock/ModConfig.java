@@ -25,6 +25,15 @@ public final class ModConfig {
 
     private static final ModConfigSpec.Builder B = new ModConfigSpec.Builder();
 
+    // ---- 默认值：既是写进 TOML 的那一份，也是「配置还没加载完」时的安全退路（两边共用同一个数字，不会走偏） ----
+
+    public static final int DEFAULT_BUILD_BLOCKS_PER_TICK = 8;
+    public static final int DEFAULT_BUILD_DISTANCE = 64;
+    public static final boolean DEFAULT_PLACE_FLUIDS = true;
+    public static final ReplacePolicy DEFAULT_REPLACE_POLICY = ReplacePolicy.AIR;
+    public static final int DEFAULT_CRAFT_MAX_DEPTH = 4;
+    public static final int DEFAULT_RESTOCK_SEARCH_RADIUS = 16;
+
     public static final ModConfigSpec.IntValue BUILD_BLOCKS_PER_TICK;
     public static final ModConfigSpec.IntValue BUILD_DISTANCE;
     public static final ModConfigSpec.BooleanValue BUILD_PLACE_FLUIDS;
@@ -112,28 +121,83 @@ public final class ModConfig {
     }
 
     // ---- 带钳制的读取口：手改坏的 TOML 永远拖不垮引擎，只会退回边界值 ----
+    //
+    // <h3>r32：为什么每个读取口都要先问一句「配置加载完了吗」</h3>
+    // <p>{@code Type.COMMON} 配置文件<b>不是</b>在 {@code registerConfig()} 那一行读进来的：
+    // 构造器里只是登记，真正的加载发生在所有模组构造器跑完之后的 COMPLETE_CONFIG 阶段。
+    // 于是就有了这个坑：客户端类（{@link BuildBridge}）在模组构造器里就被摸到，
+    // 它的静态字段初值当时直接 {@code .get()} —— 那会儿配置还没加载，
+    // NeoForge 毫不犹豫地抛
+    // {@code IllegalStateException: Cannot get config value before config is loaded.}，
+    // 玩家看到的就是「启动即崩溃」。</p>
+    //
+    // <p>现在一律走这里的读取口：<b>没加载就退回本文件顶部的 DEFAULT_*，引擎照常跑</b>，
+    // 并且<b>每次调用都现读</b>（不缓存），所以配置一旦加载完成，下一次读就能拿到玩家自己改的值。
+    // 中间那层 {@code try/catch} 是给「配置正在被重载」这类瞬时状态兜底的：
+    // 读不到数字不是世界末日，把启动带崩才是。</p>
+
+    /** TOML 是否已经加载完成（没加载或状态异常都算 false）。 */
+    private static boolean loaded() {
+        try {
+            return SPEC.isLoaded();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** 整数项的「读不到就退回默认值」通道：未加载、瞬时异常、值为 null 三种情况全兜住。 */
+    private static int readInt(ModConfigSpec.IntValue value, int fallback) {
+        if (!loaded()) return fallback;
+        try {
+            Integer v = value.get();
+            return v == null ? fallback : v;
+        } catch (Throwable t) {
+            return fallback;
+        }
+    }
+
+    /** 布尔项的同款通道。 */
+    private static boolean readBool(ModConfigSpec.BooleanValue value, boolean fallback) {
+        if (!loaded()) return fallback;
+        try {
+            Boolean v = value.get();
+            return v == null ? fallback : v;
+        } catch (Throwable t) {
+            return fallback;
+        }
+    }
+
+    /** 枚举项的同款通道（本项目只有 replacePolicy 一个枚举，签名写死最省事）。 */
+    private static ReplacePolicy readPolicy(ModConfigSpec.EnumValue<ReplacePolicy> value, ReplacePolicy fallback) {
+        if (!loaded()) return fallback;
+        try {
+            ReplacePolicy v = value.get();
+            return v == null ? fallback : v;
+        } catch (Throwable t) {
+            return fallback;
+        }
+    }
 
     /** 每 tick 放置上限（1..64）。 */
     public static int buildBlocksPerTick() {
-        int v = BUILD_BLOCKS_PER_TICK.get();
+        int v = readInt(BUILD_BLOCKS_PER_TICK, DEFAULT_BUILD_BLOCKS_PER_TICK);
         return v < 1 ? 1 : Math.min(v, 64);
     }
 
     /** 距离闸门（格，8..512，取平方前统一转 double）。 */
     public static double buildDistance() {
-        int v = BUILD_DISTANCE.get();
+        int v = readInt(BUILD_DISTANCE, DEFAULT_BUILD_DISTANCE);
         return v < 8 ? 8 : Math.min(v, 512);
     }
 
     /** 是否允许服务端放流体（客户端建计划与服务端落砖两头都查这个）。 */
     public static boolean placeFluidsAllowed() {
-        return BUILD_PLACE_FLUIDS.get();
+        return readBool(BUILD_PLACE_FLUIDS, DEFAULT_PLACE_FLUIDS);
     }
 
     /** 覆盖策略整数编码：0=只填空气 1=含原版可替换 2=不对就覆盖。 */
     public static int replacePolicyCode() {
-        ReplacePolicy p = BUILD_REPLACE_POLICY.get();
-        if (p == null) return SR.BUILD_REPLACE_AIR;
+        ReplacePolicy p = readPolicy(BUILD_REPLACE_POLICY, DEFAULT_REPLACE_POLICY);
         return switch (p) {
             case SOFT -> SR.BUILD_REPLACE_SOFT;
             case MISMATCH -> SR.BUILD_REPLACE_MISMATCH;
@@ -143,13 +207,18 @@ public final class ModConfig {
 
     /** 配方递归深度上限（1..8），替代旧的 {@code SR.CRAFT_MAX_DEPTH} 常量。 */
     public static int craftMaxDepth() {
-        int v = RESTOCK_CRAFT_DEPTH.get();
+        int v = readInt(RESTOCK_CRAFT_DEPTH, DEFAULT_CRAFT_MAX_DEPTH);
         return v < 1 ? 1 : Math.min(v, 8);
     }
 
     /** 补料兜底搜索半径（0..64，0=关）。 */
     public static int restockSearchRadius() {
-        int v = RESTOCK_SEARCH_RADIUS.get();
+        int v = readInt(RESTOCK_SEARCH_RADIUS, DEFAULT_RESTOCK_SEARCH_RADIUS);
         return v < 0 ? 0 : Math.min(v, 64);
+    }
+
+    /** 给日志/诊断用：配置文件到底加载了没有（"我改了 TOML 怎么没生效"第一眼就问这个）。 */
+    public static boolean configLoaded() {
+        return loaded();
     }
 }
