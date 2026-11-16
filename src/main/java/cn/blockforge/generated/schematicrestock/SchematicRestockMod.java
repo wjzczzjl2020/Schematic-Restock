@@ -7,16 +7,19 @@ import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
+import com.mojang.serialization.MapCodec;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.common.conditions.ICondition;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
+import net.neoforged.neoforge.registries.NeoForgeRegistries;
 
 /**
  * 「Forgematica 补料接管」核心版（NeoForge 1.21.1）。
@@ -41,6 +44,16 @@ public final class SchematicRestockMod {
     public static final DeferredRegister<SoundEvent> SOUNDS =
             DeferredRegister.create(BuiltInRegistries.SOUND_EVENT, SR.MOD_ID);
 
+    /**
+     * 配方条件编解码器注册表（1.0.1 新增）：让标记签的合成表能被配置开关<b>整条跳过加载</b>。
+     * 用法见 {@link MarkWandEnabledCondition} 和 {@code data/schematic_restock/recipe/mark_wand.json}
+     * 里那段 {@code "neoforge:conditions"}。
+     */
+    private static final DeferredRegister<MapCodec<? extends ICondition>> CONDITION_CODECS =
+            DeferredRegister.create(NeoForgeRegistries.Keys.CONDITION_CODECS, SR.MOD_ID);
+    private static final DeferredHolder<MapCodec<? extends ICondition>, MapCodec<MarkWandEnabledCondition>> MARK_WAND_CONDITION =
+            CONDITION_CODECS.register("mark_wand_enabled", () -> MarkWandEnabledCondition.CODEC);
+
     /** 材料箱标记签 */
     public static final DeferredItem<Item> MARK_WAND =
             ITEMS.register("mark_wand", MarkWandItem::new);
@@ -60,6 +73,7 @@ public final class SchematicRestockMod {
         ModConfig.register();
         ITEMS.register(modBus);
         SOUNDS.register(modBus);
+        CONDITION_CODECS.register(modBus);   // 1.0.1：标记签合成表的开关条件
 
         modBus.addListener(this::onPayloadRegister);
         modBus.addListener(this::onCreativeTab);
@@ -110,7 +124,20 @@ public final class SchematicRestockMod {
         }
     }
 
+    /**
+     * 创造模式「建筑方块」页里的标记签入口。
+     *
+     * <p>1.0.1：玩家选了原版物品当标记物（{@code wand.useVanillaItem=true}，默认）时<b>不给它挂号</b>——
+     * 配合合成表那边的条件，玩家在任何地方都看不到这支多余的标记签。
+     * 关掉开关它就照常出现。</p>
+     *
+     * <p>时机是安全的：这份内容只在玩家打开创造背包时构建（原版只在
+     * {@code CreativeModeInventoryScreen} 里调 {@code tryRebuildTabContents}），
+     * 那时 COMMON 配置早加载完了，读到的一定是玩家 TOML 里的值；
+     * 就算哪一次读不到，{@code ModConfig} 会退回默认值（=隐藏），与合成表条件的退路一致。</p>
+     */
     private void onCreativeTab(BuildCreativeModeTabContentsEvent event) {
+        if (ModConfig.useVanillaMarkerItem()) return;
         if (event.getTabKey() == CreativeModeTabs.BUILDING_BLOCKS) {
             event.accept(new ItemStack(MARK_WAND.get()));
         }

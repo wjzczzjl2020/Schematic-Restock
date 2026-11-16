@@ -1,5 +1,10 @@
 {
   "type": "minecraft:crafting_shaped",
+  "neoforge:conditions": [
+    {
+      "type": "schematic_restock:mark_wand_enabled"
+    }
+  ],
   "category": "tools",
   "pattern": [
     "  s",

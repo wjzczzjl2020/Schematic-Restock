@@ -30,6 +30,9 @@ public class MarkWandItem extends Item {
         tooltip.add(Txt.c("tooltip.mark_wand.line1").withStyle(ChatFormatting.GRAY));
         tooltip.add(Txt.c("tooltip.mark_wand.line2").withStyle(ChatFormatting.GRAY));
         tooltip.add(Txt.c("tooltip.mark_wand.line3", SR.MAX_BOX_MARKS).withStyle(ChatFormatting.GRAY));
-        tooltip.add(Txt.c("tooltip.mark_wand.line4").withStyle(ChatFormatting.GOLD));
+        tooltip.add(Txt.c("tooltip.mark_wand.line4").withStyle(ChatFormatting.GRAY));
+        // 1.0.1：这支签现在只是「可选标记物」，顺手告诉玩家怎么换成原版物品。
+        // 只有这支签自己看得到这一行 —— 原版物品那条路走 ClientEvents#onItemTooltip。
+        tooltip.add(Txt.c("tooltip.mark_wand.switch_hint").withStyle(ChatFormatting.DARK_GRAY));
     }
 }

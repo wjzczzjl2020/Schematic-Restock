@@ -4,7 +4,8 @@ plugins {
 }
 version = mod_version
 group = mod_group_id
-base { archivesName = mod_id }
+// 1.0.1 起：包名带上游戏版本，成品叫 schematic_restock-1.21.1-1.0.1.jar
+base { archivesName = "${mod_id}-${minecraft_version}" }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 neoForge {
     version = project.neo_version

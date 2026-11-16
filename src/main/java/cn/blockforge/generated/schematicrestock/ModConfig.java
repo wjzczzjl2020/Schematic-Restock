@@ -10,9 +10,15 @@ import net.neoforged.neoforge.common.ModConfigSpec;
  * 通用配置 —— {@code .minecraft/config/schematic_restock-common.toml}（NeoForge {@code ModConfigSpec}，
  * {@code Type.COMMON}：单机的一个文件管两端，专用服务器只认服务端自己那一份）。
  *
- * <p>这里暴露的是玩家最该自己调的六个闸门；其余内部节流（时间预算、槽位上限、会话寿命之类）
- * 刻意<b>不</b>进配置——它们和引擎的判定是一体的，改错一个就是一次"有货不拿"级别的血案，
- * 出问题请优先看排障日志而不是调数字。</p>
+ * <p>这里暴露的是玩家最该自己调的八个闸门（标记物一项 + 建造四项 + 补料三项）；其余内部节流
+ * （时间预算、槽位上限、会话寿命之类）刻意<b>不</b>进配置——它们和引擎的判定是一体的，
+ * 改错一个就是一次"有货不拿"级别的血案，出问题请优先看排障日志而不是调数字。</p>
+ *
+ * <p><b>1.0.1 新增 {@code wand} 一节</b>：{@code useVanillaItem} + {@code markerItemId}，
+ * 决定「手里拿什么去标箱子」。默认用原版的金锄（几乎没人用的工具，占掉它的右键不心疼），
+ * 此时模组自带的材料标记签会从创造模式和合成表里一起隐藏；关掉开关一切照旧。
+ * 两种物品在开关打开时<b>都</b>能用来标记，老玩家背包里已有的标记签永远不会失效。
+ * 改完这两项要重启游戏（配方和创造页在世界加载时就定死了）。</p>
  *
  * <p>游戏内命令照旧可用，作为快捷修改方式：
  * {@code /matfill build replace <air|soft|all>} 与 {@code /matfill build fluids <on|off>}
@@ -33,7 +39,11 @@ public final class ModConfig {
     public static final ReplacePolicy DEFAULT_REPLACE_POLICY = ReplacePolicy.AIR;
     public static final int DEFAULT_CRAFT_MAX_DEPTH = 4;
     public static final int DEFAULT_RESTOCK_SEARCH_RADIUS = 16;
+    public static final boolean DEFAULT_USE_VANILLA_MARKER = true;
+    public static final String DEFAULT_MARKER_ITEM_ID = "minecraft:golden_hoe";
 
+    public static final ModConfigSpec.BooleanValue WAND_USE_VANILLA_ITEM;
+    public static final ModConfigSpec.ConfigValue<String> WAND_MARKER_ITEM_ID;
     public static final ModConfigSpec.IntValue BUILD_BLOCKS_PER_TICK;
     public static final ModConfigSpec.IntValue BUILD_DISTANCE;
     public static final ModConfigSpec.BooleanValue BUILD_PLACE_FLUIDS;
@@ -44,6 +54,39 @@ public final class ModConfig {
     static final ModConfigSpec SPEC;
 
     static {
+        B.comment("Marker item: which item you hold to mark chests (V+M needs marked chests).").push("wand");
+
+        WAND_USE_VANILLA_ITEM = B
+                .comment(
+                        "true (default)  - hold a VANILLA item (see markerItemId below, golden hoe by default)",
+                        "                 to mark chests. The mod's own 'Material Marking Tag' then disappears from",
+                        "                 the creative menu AND its crafting recipe is not loaded, so there is nothing",
+                        "                 new to look for. A tag already in someone's inventory keeps working forever -",
+                        "                 old items are never revoked.",
+                        "false          - the mod's Material Marking Tag comes back (creative menu + recipe), and the",
+                        "                 vanilla item goes back to behaving exactly like vanilla (holding a golden hoe",
+                        "                 will open chests normally again).",
+                        "Takes effect on game restart: recipes and the creative menu are built while the world loads.",
+                        "Both the client and the server read their own copy of this file, so on a multiplayer server",
+                        "the owner decides what the marker item is.",
+                        "Default true.")
+                .define("useVanillaItem", true);
+
+        WAND_MARKER_ITEM_ID = B
+                .comment(
+                        "The item id used as the marker while useVanillaItem=true. Any registered item id works,",
+                        "modded ones included - 'minecraft:golden_hoe', 'minecraft:paper', 'minecraft:name_tag',",
+                        "'curios:bundle_of_your_mod'. Pick something whose right-click you can afford to lose:",
+                        "marking works by SWALLOWING the right-click on a block, so while you hold this item you cannot",
+                        "open a chest, place a sign or till soil with it. Golden hoe is the default precisely because",
+                        "nobody uses it. Signs, item frames, doors, buttons and chests are bad choices - their own",
+                        "right-click would stop working. Leave it empty or write a typo and the mod falls back to",
+                        "holding the Material Marking Tag only (nothing breaks, you just get a warning in the log).",
+                        "Restart after changing it. Default 'minecraft:golden_hoe'.")
+                .define("markerItemId", "minecraft:golden_hoe");
+
+        B.pop();
+
         B.comment("Auto-build (V+U): how the server engine places the schematic.").push("autobuild");
 
         BUILD_BLOCKS_PER_TICK = B
@@ -178,6 +221,17 @@ public final class ModConfig {
         }
     }
 
+    /** 字符串项的同款通道（配置里写没写引号都收，见 {@link #markerItemId()}）。 */
+    private static String readString(ModConfigSpec.ConfigValue<String> value, String fallback) {
+        if (!loaded()) return fallback;
+        try {
+            String v = value.get();
+            return v == null ? fallback : v;
+        } catch (Throwable t) {
+            return fallback;
+        }
+    }
+
     /** 每 tick 放置上限（1..64）。 */
     public static int buildBlocksPerTick() {
         int v = readInt(BUILD_BLOCKS_PER_TICK, DEFAULT_BUILD_BLOCKS_PER_TICK);
@@ -215,6 +269,23 @@ public final class ModConfig {
     public static int restockSearchRadius() {
         int v = readInt(RESTOCK_SEARCH_RADIUS, DEFAULT_RESTOCK_SEARCH_RADIUS);
         return v < 0 ? 0 : Math.min(v, 64);
+    }
+
+    /**
+     * 是否用原版物品当标记物（{@code wand.useVanillaItem}）。
+     *
+     * <p>读的是<b>本端</b>那一份配置文件：COMMON 类型，单机器两端同一份，联机时服务端那份说了算
+     * （手持判定两端都要做，见 {@code CommonEvents}）。改完要重启游戏——创造页和合成表在世界加载时
+     * 就定下来了，中途改不会让配方凭空出现。</p>
+     */
+    public static boolean useVanillaMarkerItem() {
+        return readBool(WAND_USE_VANILLA_ITEM, DEFAULT_USE_VANILLA_MARKER);
+    }
+
+    /** 标记物的物品 id 原文（{@code wand.markerItemId}），合法性由 {@code MarkerItems} 去注册表里验。 */
+    public static String markerItemId() {
+        String v = readString(WAND_MARKER_ITEM_ID, DEFAULT_MARKER_ITEM_ID);
+        return v == null ? DEFAULT_MARKER_ITEM_ID : v.trim();
     }
 
     /** 给日志/诊断用：配置文件到底加载了没有（"我改了 TOML 怎么没生效"第一眼就问这个）。 */

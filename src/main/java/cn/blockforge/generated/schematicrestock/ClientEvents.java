@@ -20,6 +20,7 @@ import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.entity.player.ItemTooltipEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.lwjgl.glfw.GLFW;
 
@@ -237,6 +238,35 @@ public final class ClientEvents {
     public static void onClientLogout(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut e) {
         lastWorldKey = null;
         resetAllClientState();
+    }
+
+    /**
+     * <b>1.0.1：把操作说明挂到「配置指定的原版标记物」上</b>（默认金锄）。
+     *
+     * <p>原版物品的悬浮说明是写死在 {@code Item} 里的，我们不可能去改金锄这个类，
+     * 所以走 NeoForge 的 {@code ItemTooltipEvent}：tooltip 生成完再补几行。
+     * 这是玩家唯一的说明书入口——物品在创造栏/配方书里都查不到任何线索。</p>
+     *
+     * <p>三道闸门，缺一不可：</p>
+     * <ol>
+     *   <li>只在客户端渲染 tooltip 时触发（这个事件本身就是客户端的）；</li>
+     *   <li>{@code wand.useVanillaItem} 关着 → 金锄就是普通金锄，一行都不加；</li>
+     *   <li>手里的东西<b>不是</b>配置指定的那件物品 → 不加（材料标记签自己有
+     *       {@link MarkWandItem#appendHoverText}，两边都加就成了重复广告）。</li>
+     * </ol>
+     */
+    @SubscribeEvent
+    public static void onItemTooltip(ItemTooltipEvent e) {
+        if (!MarkerItems.isConfiguredVanillaMarker(e.getItemStack())) return;
+
+        List<Component> tip = e.getToolTip();
+        tip.add(Txt.c("tooltip.marker.header").withStyle(ChatFormatting.GOLD));
+        tip.add(Txt.c("tooltip.mark_wand.line1").withStyle(ChatFormatting.GRAY));
+        tip.add(Txt.c("tooltip.mark_wand.line2").withStyle(ChatFormatting.GRAY));
+        tip.add(Txt.c("tooltip.mark_wand.line3", SR.MAX_BOX_MARKS).withStyle(ChatFormatting.GRAY));
+        tip.add(Txt.c("tooltip.mark_wand.line4").withStyle(ChatFormatting.GRAY));
+        tip.add(Txt.c("tooltip.marker.caution").withStyle(ChatFormatting.YELLOW));
+        tip.add(Txt.c("tooltip.marker.hint").withStyle(ChatFormatting.DARK_GRAY));
     }
 
     @SubscribeEvent
@@ -792,6 +822,13 @@ public final class ClientEvents {
                                     : "cmd.matfill.marks",
                             Math.max(markCount, 0), SR.MAX_CONTAINERS,
                             Math.max(outputCount, 0), SR.MAX_OUTPUTS), false);
+                    // 1.0.1：标记物现在是配置项，"我改了 markerItemId 怎么没反应"最不好查，
+                    // 所以把「当前到底哪件物品生效 + 配置里写的是什么」一并打出来。
+                    ctx.getSource().sendSuccess(() -> Txt.c("cmd.matfill.marker",
+                            MarkerItems.describe(),
+                            ModConfig.useVanillaMarkerItem()
+                                    ? Txt.s("cmd.ghostlog.state_on") : Txt.s("cmd.ghostlog.state_off"),
+                            ModConfig.markerItemId()), false);
                     // r16：建造这一档的状态另起两行（客户端一份、服务端一份，方便对照）
                     ctx.getSource().sendSuccess(() -> Txt.c("cmd.matfill.build",
                             BuildBridge.describe()), false);

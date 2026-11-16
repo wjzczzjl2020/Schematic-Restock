@@ -4,6 +4,10 @@
   "tooltip.mark_wand.line2": "Right-click a non-container (dirt/stone): red action-bar hint, nothing else happens",
   "tooltip.mark_wand.line3": "Shift+right-click twice: box-select up to %s containers as material chests",
   "tooltip.mark_wand.line4": "Shift+left-click a container: mark / unmark an output (overflow) chest",
+  "tooltip.mark_wand.switch_hint": "Rather not use this? Set wand.useVanillaItem=true (the default) in the config to mark with a vanilla item instead - after a restart this tag leaves the creative menu and the recipe book",
+  "tooltip.marker.header": "Restock Takeover - marker item",
+  "tooltip.marker.caution": "While holding it, right-clicking a block is always taken over: no chest GUI, no tilling soil. Put it back in your inventory when you are done marking",
+  "tooltip.marker.hint": "Use a different item instead: set wand.markerItemId in config/schematic_restock-common.toml, then restart",
 
   "key.categories.schematic_restock": "Restock Takeover",
   "key.schematic_restock.takeover": "Restock Takeover (hold V + this key)",
@@ -135,6 +139,7 @@
   "cmd.matfill.marks_pending": "Marks: material %s/%s · output %s/%s (server has not synced yet: rejoin or click once to see)",
   "cmd.matfill.build": "Auto-build: %s",
   "cmd.matfill.build_server": "  server: %s | reach gate %s blocks | throttle %s blocks/tick",
+  "cmd.matfill.marker": "Marker item: %s (wand.useVanillaItem=%s, configured id=%s; restart the game after editing)",
   "cmd.matfill.clearmarks": "Clear-marks request sent",
   "cmd.matfill.unsync": "[Shortfall sync] %s",
   "cmd.matfill.build_help": "  subcommands: start / cancel / replace air|soft|all / fluids on|off (in-game: hold V then U or Y)",

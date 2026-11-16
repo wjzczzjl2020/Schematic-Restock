@@ -262,7 +262,7 @@ public final class TakeoverEngine {
                         result.autoBorrowed = borrowed.size();
                         GhostDebug.line("══ 未标记材料箱，本次兜底借用玩家半径 " + radius
                                 + " 格内实测到的容器方块 " + borrowed.size() + " 个（不写回标记名单；"
-                                + "建议用标记签把储物墙标成材料箱，之后就不走这条兜底了）");
+                                + "建议用标记物（默认手持金锄）把储物墙标成材料箱，之后就不走这条兜底了）");
                     }
                 }
             }
@@ -1178,7 +1178,7 @@ public final class TakeoverEngine {
             if (stalled) appendNote(sb, "连续 " + (SR.STALL_EXIT_MS / 1000L) + " 秒零进展，提前退出");
             if (autoBorrowed > 0) {
                 appendNote(sb, "没有标记任何材料箱，本次按兜底半径借用了附近 " + autoBorrowed
-                        + " 个容器取料（建议用标记签标箱，详见配置 restock.searchRadius）");
+                        + " 个容器取料（建议用手上的标记物标箱，默认是金锄；详见配置 restock.searchRadius）");
             }
             if (!noRecipeKinds.isEmpty()) {
                 appendNote(sb, "查无工作台配方 " + noRecipeKinds.size() + " 种（需工具加工，如去皮原木）："

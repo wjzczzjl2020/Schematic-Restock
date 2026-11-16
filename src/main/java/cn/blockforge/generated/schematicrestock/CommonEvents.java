@@ -12,12 +12,17 @@ import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 
 /**
- * 通用事件：手持标记签右键方块 -&gt; 走标记流程。
+ * 通用事件：手持<b>标记物</b>右键方块 -&gt; 走标记流程。
+ *
+ * <p>1.0.1：「标记物」不再写死成材料标记签，而是由 {@code wand.useVanillaItem} /
+ * {@code wand.markerItemId} 决定（默认原版的金锄）。两处手持判定统一走
+ * {@link MarkerItems#isMarker}，客户端和服务端各读各那一端的同一份 COMMON 配置——
+ * 联机时以服主那份为准。</p>
  *
  * <p>r24：右键一律<b>两端同时取消</b>，箱子/工作台等界面绝不弹出来；
  * 目标不是容器时屏幕中间给一条红字提示，且什么都不做。</p>
  *
- * <p>标记签的三种点法（r7）：
+ * <p>标记物的三种点法（r7）：
  * <ul>
  *   <li><b>右键</b>容器：标记 / 取消<b>材料箱</b>（补料只从这里取料）；</li>
  *   <li><b>Shift+右键</b>两下：框选一片区域，批量标成材料箱（r24：上限 16 → 64）；</li>
@@ -53,9 +58,9 @@ public final class CommonEvents {
      */
     @SubscribeEvent
     public static void onRightClickBlock(PlayerInteractEvent.RightClickBlock e) {
-        // 主手不是标记签 → 这是普通右键，原样放行（该开箱子开箱子）
-        if (!e.getEntity().getItemInHand(InteractionHand.MAIN_HAND)
-                .is(SchematicRestockMod.MARK_WAND.get())) return;
+        // 主手不是标记物 → 这是普通右键，原样放行（该开箱子开箱子）
+        // 1.0.1：标记物可以是配置里的原版物品（默认金锄），判定统一走 MarkerItems
+        if (!MarkerItems.isMarker(e.getEntity().getItemInHand(InteractionHand.MAIN_HAND))) return;
 
         // 两侧都取消：这才真正阻断 GUI
         e.setCanceled(true);
@@ -84,7 +89,7 @@ public final class CommonEvents {
     @SubscribeEvent
     public static void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock e) {
         ItemStack held = e.getItemStack();
-        if (!held.is(SchematicRestockMod.MARK_WAND.get())) return;
+        if (!MarkerItems.isMarker(held)) return;
         if (!e.getEntity().isShiftKeyDown()) return;
         // 松手/中止这两类动作不参与标记，否则一次点击会触发两回
         if (e.getAction() == PlayerInteractEvent.LeftClickBlock.Action.STOP
